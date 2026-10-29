@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>突击前线 v3 - 多地图/丧尸模式</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='15' fill='%231a1a2e'/><text x='50' y='65' font-size='45' text-anchor='middle' fill='%23e94560' font-weight='bold'>FPS</text></svg>">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Courier New', monospace; touch-action: none; user-select: none; -webkit-user-select: none; }
+
+#gameContainer { width: 100%; height: 100%; position: relative; overflow: hidden; }
+@media (orientation: portrait) and (max-width: 900px) {
+  #gameContainer {
+    transform: rotate(90deg);
+    transform-origin: top left;
+    width: 100vh;
+    height: 100vw;
+    position: absolute;
+    top: 0;
+    left: 100vw;
+  }
+}
+
+#gameCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; display: block; }
+
+#startMenu { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px; overflow-y: auto; }
+#startMenu h1 { color: #e94560; font-size: 28px; font-weight: bold; text-shadow: 0 0 20px rgba(233,69,96,0.5); margin-bottom: 4px; letter-spacing: 3px; }
+#startMenu .subtitle { color: #aaa; font-size: 12px; margin-bottom: 14px; letter-spacing: 2px; }
+.section-label { color: #ffd700; font-size: 11px; margin: 8px 0 6px; letter-spacing: 1px; }
+
+.weapon-select { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 100%; max-width: 340px; }
+.weapon-card { background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 8px 6px; text-align: center; cursor: pointer; transition: all 0.2s; }
+.weapon-card.active { border-color: #e94560; background: rgba(233,69,96,0.2); }
+.weapon-card .icon { font-size: 20px; margin-bottom: 3px; }
+.weapon-card .name { color: #fff; font-size: 11px; font-weight: bold; }
+.weapon-card .desc { color: #888; font-size: 9px; margin-top: 2px; }
+
+.map-select { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; width: 100%; max-width: 340px; }
+.map-card { background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 8px 4px; text-align: center; cursor: pointer; transition: all 0.2s; }
+.map-card.active { border-color: #00d4ff; background: rgba(0,212,255,0.2); }
+.map-card .icon { font-size: 18px; margin-bottom: 3px; }
+.map-card .name { color: #fff; font-size: 10px; font-weight: bold; }
+
+.mode-select { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; width: 100%; max-width: 340px; }
+.mode-card { background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 10px 8px; text-align: center; cursor: pointer; transition: all 0.2s; }
+.mode-card.active { border-color: #7cfc00; background: rgba(124,252,0,0.15); }
+.mode-card .icon { font-size: 22px; margin-bottom: 4px; }
+.mode-card .name { color: #fff; font-size: 12px; font-weight: bold; }
+.mode-card .desc { color: #888; font-size: 9px; margin-top: 3px; }
+
+#startBtn { width: 200px; height: 46px; background: #e94560; color: #fff; border: none; border-radius: 23px; font-size: 18px; font-weight: bold; cursor: pointer; letter-spacing: 2px; box-shadow: 0 4px 20px rgba(233,69,96,0.4); margin-top: 14px; }
+#startBtn:active { transform: scale(0.95); }
+
+#hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
+#crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 24px; height: 24px; }
+#crosshair::before, #crosshair::after { content: ''; position: absolute; background: #0f0; box-shadow: 0 0 4px #0f0; }
+#crosshair::before { left: 50%; top: 0; width: 2px; height: 100%; transform: translateX(-50%); }
+#crosshair::after { top: 50%; left: 0; height: 2px; width: 100%; transform: translateY(-50%); }
+#crosshair.ads { width: 10px; height: 10px; }
+#crosshair.ads::before { width: 1px; }
+#crosshair.ads::after { height: 1px; }
+
+#hitMarker { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(45deg); width: 30px; height: 30px; opacity: 0; transition: opacity 0.1s; }
+#hitMarker::before, #hitMarker::after { content: ''; position: absolute; background: #ff0; }
+#hitMarker::before { left: 50%; top: 0; width: 2px; height: 8px; transform: translateX(-50%); }
+#hitMarker::after { top: 50%; left: 0; height: 2px; width: 8px; transform: translateY(-50%); }
+
+#cheatBtn { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: 60px; height: 36px; background: rgba(255,215,0,0.5); border: 2px solid rgba(255,215,0,0.9); border-radius: 18px; color: #ffd700; font-size: 14px; font-weight: bold; cursor: pointer; z-index: 999; pointer-events: auto; display: flex; align-items: center; justify-content: center; touch-action: manipulation; }
+#cheatPanel { position: absolute; top: 54px; left: 50%; transform: translateX(-50%); width: 200px; background: rgba(0,0,0,0.95); border: 1px solid rgba(255,215,0,0.7); border-radius: 10px; padding: 12px; z-index: 999; pointer-events: auto; display: none; touch-action: manipulation; }
+#cheatPanel.show { display: block; }
+.cheat-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; color: #ffd700; font-size: 14px; border-bottom: 1px solid rgba(255,215,0,0.2); }
+.cheat-item:last-child { border-bottom: none; }
+.cheat-toggle { width: 44px; height: 24px; background: #333; border-radius: 12px; position: relative; cursor: pointer; transition: background 0.2s; flex-shrink: 0; }
+.cheat-toggle.on { background: #ffd700; }
+.cheat-toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; background: #fff; border-radius: 50%; transition: left 0.2s; }
+.cheat-toggle.on::after { left: 22px; }
+
+#healthBar { position: absolute; bottom: 100px; left: 20px; width: 120px; }
+#healthBar .label { color: #fff; font-size: 11px; margin-bottom: 3px; text-shadow: 0 1px 2px #000; }
+#healthBar .bar-bg { width: 100%; height: 12px; background: rgba(0,0,0,0.5); border-radius: 6px; overflow: hidden; border: 1px solid rgba(255,255,255,0.3); }
+#healthBar .bar-fill { height: 100%; background: linear-gradient(90deg, #e94560, #ff6b6b); border-radius: 5px; transition: width 0.2s; }
+
+#ammoDisplay { position: absolute; bottom: 100px; right: 20px; text-align: right; }
+#ammoDisplay .weapon-name { color: #aaa; font-size: 11px; margin-bottom: 3px; }
+#ammoDisplay .ammo-count { color: #fff; font-size: 28px; font-weight: bold; text-shadow: 0 2px 4px #000; }
+#ammoDisplay .ammo-reserve { color: #888; font-size: 14px; }
+
+#scoreDisplay { position: absolute; top: 20px; right: 20px; text-align: right; }
+#scoreDisplay .score-label { color: #aaa; font-size: 11px; }
+#scoreDisplay .score-value { color: #ffd700; font-size: 22px; font-weight: bold; text-shadow: 0 2px 4px #000; }
+
+#waveDisplay { position: absolute; top: 20px; left: 20px; }
+#waveDisplay .wave-label { color: #aaa; font-size: 11px; }
+#waveDisplay .wave-value { color: #0ff; font-size: 18px; font-weight: bold; text-shadow: 0 2px 4px #000; }
+#waveDisplay .mode-tag { color: #7cfc00; font-size: 10px; margin-top: 2px; }
+
+#joystickZone { position: absolute; bottom: 0; left: 0; width: 40%; height: 100%; z-index: 20; }
+#joystick { position: absolute; bottom: 70px; left: 25px; width: 110px; height: 110px; background: rgba(255,255,255,0.1); border-radius: 50%; border: 2px solid rgba(255,255,255,0.2); }
+#joystickKnob { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 50px; height: 50px; background: rgba(255,255,255,0.3); border-radius: 50%; }
+
+#lookZone { position: absolute; top: 0; right: 0; width: 60%; height: 100%; z-index: 10; }
+
+#fireBtn { position: absolute; bottom: 80px; right: 25px; width: 85px; height: 85px; background: rgba(233,69,96,0.7); border: 3px solid rgba(255,255,255,0.5); border-radius: 50%; z-index: 30; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 16px; font-weight: bold; pointer-events: auto; }
+#fireBtn:active { background: rgba(233,69,96,1); transform: scale(0.92); }
+
+#reloadBtn { position: absolute; bottom: 190px; right: 50px; width: 55px; height: 55px; background: rgba(255,165,0,0.6); border: 2px solid rgba(255,255,255,0.4); border-radius: 50%; z-index: 30; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; font-weight: bold; pointer-events: auto; }
+#reloadBtn:active { background: rgba(255,165,0,0.9); }
+
+#adsBtn { position: absolute; bottom: 190px; right: 125px; width: 55px; height: 55px; background: rgba(100,149,237,0.6); border: 2px solid rgba(255,255,255,0.4); border-radius: 50%; z-index: 30; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; font-weight: bold; pointer-events: auto; }
+#adsBtn:active { background: rgba(100,149,237,0.9); }
+
+#weaponSwitch { position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; z-index: 30; }
+.weapon-slot { width: 42px; height: 32px; background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 10px; font-weight: bold; pointer-events: auto; }
+.weapon-slot.active { background: rgba(233,69,96,0.7); border-color: #e94560; }
+
+#damageOverlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 5; background: radial-gradient(ellipse at center, transparent 40%, rgba(255,0,0,0.6) 100%); opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+
+#deathScreen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 200; background: rgba(0,0,0,0.85); display: none; flex-direction: column; align-items: center; justify-content: center; }
+#deathScreen h2 { color: #e94560; font-size: 32px; margin-bottom: 20px; }
+#deathScreen .stats { color: #fff; font-size: 16px; margin-bottom: 30px; text-align: center; line-height: 1.8; }
+#restartBtn { width: 180px; height: 45px; background: #e94560; color: #fff; border: none; border-radius: 22px; font-size: 16px; font-weight: bold; cursor: pointer; }
+#restartBtn:active { transform: scale(0.95); }
+
+#minimap { position: absolute; top: 60px; left: 20px; width: 80px; height: 80px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; }
+
+#rotateHint { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.9); padding: 20px 30px; border-radius: 12px; z-index: 999; flex-direction: column; align-items: center; color: #fff; font-size: 14px; text-align: center; }
+#rotateHint .icon { font-size: 40px; margin-bottom: 10px; animation: rotate 2s infinite; }
+@keyframes rotate { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(90deg); } }
+#rotateHint .close-hint { margin-top: 12px; padding: 6px 16px; background: #e94560; border-radius: 15px; font-size: 12px; cursor: pointer; }
+@media (orientation: portrait) and (max-width: 900px) {
+  #rotateHint.show { display: flex; }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  #healthBar { bottom: 20px; left: 20px; width: 100px; }
+  #ammoDisplay { bottom: 20px; right: 20px; }
+  #ammoDisplay .ammo-count { font-size: 22px; }
+  #joystick { bottom: 20px; left: 20px; width: 80px; height: 80px; }
+  #joystickKnob { width: 36px; height: 36px; }
+  #fireBtn { bottom: 30px; right: 30px; width: 60px; height: 60px; font-size: 12px; }
+  #reloadBtn { bottom: 100px; right: 40px; width: 45px; height: 45px; font-size: 10px; }
+  #adsBtn { bottom: 100px; right: 100px; width: 50px; height: 50px; font-size: 10px; }
+  #weaponSwitch { bottom: 10px; gap: 5px; }
+  .weapon-slot { width: 38px; height: 28px; font-size: 9px; }
+  #scoreDisplay { top: 10px; right: 10px; }
+  #waveDisplay { top: 10px; left: 10px; }
+  #minimap { top: 45px; left: 10px; width: 60px; height: 60px; }
+  #startMenu h1 { font-size: 24px; margin-bottom: 2px; }
+  #startMenu .subtitle { margin-bottom: 8px; }
+  .weapon-select { max-width: 280px; gap: 6px; }
+  .weapon-card { padding: 5px 4px; }
+  .weapon-card .icon { font-size: 16px; }
+  .weapon-card .name { font-size: 10px; }
+  .map-select { max-width: 280px; }
+  .mode-select { max-width: 280px; }
+  .section-label { margin: 5px 0 4px; }
+}
+</style>
+</head>
+<body>
+
+<div id="rotateHint">
+  <div class="icon">📱</div>
+  <div>已自动切换为横屏模式</div>
+  <div style="font-size:11px;color:#888;margin-top:5px;">竖屏握持手机即可游玩</div>
+  <div class="close-hint" id="closeHint">知道了</div>
+</div>
+
+<div id="gameContainer">
+
+<div id="cheatBtn">作弊</div>
+<div id="cheatPanel">
+  <div class="cheat-item">无间隔射击<div class="cheat-toggle" id="cheatNoCooldown"></div></div>
+  <div class="cheat-item">全自动开火<div class="cheat-toggle" id="cheatAutoFire"></div></div>
+  <div class="cheat-item">无限弹药<div class="cheat-toggle" id="cheatNoReload"></div></div>
+  <div class="cheat-item">无后坐力<div class="cheat-toggle" id="cheatNoRecoil"></div></div>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<div id="startMenu">
+  <h1>突击前线</h1>
+  <div class="subtitle">MOBILE FPS v3 · 多地图 / 丧尸模式</div>
+  <div class="section-label">— 选择武器 —</div>
+  <div class="weapon-select">
+    <div class="weapon-card active" data-weapon="pistol"><div class="icon">🔫</div><div class="name">手枪</div><div class="desc">M9 战术</div></div>
+    <div class="weapon-card" data-weapon="smg"><div class="icon">💥</div><div class="name">冲锋枪</div><div class="desc">UMP45</div></div>
+    <div class="weapon-card" data-weapon="rifle"><div class="icon">🎯</div><div class="name">步枪</div><div class="desc">AK-47</div></div>
+    <div class="weapon-card" data-weapon="shotgun"><div class="icon">🔥</div><div class="name">霰弹枪</div><div class="desc">M870</div></div>
+    <div class="weapon-card" data-weapon="sniper"><div class="icon">🔭</div><div class="name">狙击枪</div><div class="desc">AWM</div></div>
+    <div class="weapon-card" data-weapon="launcher"><div class="icon">🚀</div><div class="name">火箭筒</div><div class="desc">RPG-7</div></div>
+  </div>
+  <div class="section-label">— 选择地图 —</div>
+  <div class="map-select">
+    <div class="map-card active" data-map="training"><div class="icon">🏕️</div><div class="name">训练场</div></div>
+    <div class="map-card" data-map="straight"><div class="icon">📏</div><div class="name">直道</div></div>
+    <div class="map-card" data-map="urban"><div class="icon">🏙️</div><div class="name">巷战</div></div>
+    <div class="map-card" data-map="flat"><div class="icon">🌾</div><div class="name">平原</div></div>
+    <div class="map-card" data-map="maze"><div class="icon">🏚️</div><div class="name">迷城</div></div>
+  </div>
+  <div class="section-label">— 选择模式 —</div>
+  <div class="mode-select">
+    <div class="mode-card active" data-mode="pve"><div class="icon">🎖️</div><div class="name">战术对抗</div><div class="desc">敌人会开枪</div></div>
+    <div class="mode-card" data-mode="zombie"><div class="icon">🧟</div><div class="name">丧尸模式</div><div class="desc">人海近战·数量翻倍</div></div>
+  </div>
+  <button id="startBtn">开始战斗</button>
+</div>
+
+<div id="hud">
+  <div id="crosshair"></div>
+  <div id="hitMarker"></div>
+  <div id="damageOverlay"></div>
+  <div id="healthBar"><div class="label">生命值</div><div class="bar-bg"><div class="bar-fill" id="healthFill" style="width: 100%"></div></div></div>
+  <div id="ammoDisplay"><div class="weapon-name" id="currentWeaponName">M9 战术手枪</div><span class="ammo-count" id="currentAmmo">12</span><span class="ammo-reserve">/ <span id="reserveAmmo">48</span></span></div>
+  <div id="scoreDisplay"><div class="score-label">击杀数</div><div class="score-value" id="killCount">0</div></div>
+  <div id="waveDisplay"><div class="wave-label">波次</div><div class="wave-value" id="waveNum">1</div><div class="mode-tag" id="modeTag">战术对抗</div></div>
+  <canvas id="minimap" width="80" height="80"></canvas>
+</div>
+
+<div id="joystickZone"><div id="joystick"><div id="joystickKnob"></div></div></div>
+<div id="lookZone"></div>
+<div id="adsBtn">瞄准</div>
+<div id="fireBtn">射击</div>
+<div id="reloadBtn">换弹</div>
+<div id="weaponSwitch">
+  <div class="weapon-slot active" data-w="0">🔫</div>
+  <div class="weapon-slot" data-w="1">💥</div>
+  <div class="weapon-slot" data-w="2">🎯</div>
+  <div class="weapon-slot" data-w="3">🔥</div>
+  <div class="weapon-slot" data-w="4">🔭</div>
+  <div class="weapon-slot" data-w="5">🚀</div>
+</div>
+
+<div id="deathScreen">
+  <h2>任务失败</h2>
+  <div class="stats">击杀数：<span id="finalKills">0</span><br>到达波次：<span id="finalWave">1</span></div>
+  <button id="restartBtn">重新开始</button>
+</div>
+
+<script src="https://fastly.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script>
+// ===== 游戏核心变量 =====
+let scene, camera, renderer;
+let player = { position: new THREE.Vector3(0, 1.7, 10), rotationY: 0, rotationX: 0, health: 100, speed: 8 };
+let enemies = [];
+let bullets = [];
+let explosions = [];
+let buildings = [];
+let groundMesh = null;
+let isPlaying = false;
+let kills = 0;
+let wave = 1;
+let waveStartTime = Date.now();
+let currentWeaponIndex = 0;
+let isAiming = false;
+
+// 选择状态
+let selectedMap = 'training';
+let selectedMode = 'pve';
+let mapConfig = { bounds: 95, spawnRadius: 60 };
+let corridorPath = []; // 走廊中心线点列表，用于沿走廊生成敌人
+
+// 武器配置
+const WEAPONS = [
+  { name: 'M9 战术手枪', damage: 40, fireRate: 280, magSize: 12, reserveAmmo: 60, reloadTime: 1200, spread: 0.015, auto: false, bulletSpeed: 90, range: 60, adsSpread: 0.005, adsFov: 60 },
+  { name: 'UMP45 冲锋枪', damage: 30, fireRate: 90, magSize: 30, reserveAmmo: 120, reloadTime: 1800, spread: 0.035, auto: true, bulletSpeed: 80, range: 70, adsSpread: 0.015, adsFov: 55 },
+  { name: 'AK-47 步枪', damage: 50, fireRate: 130, magSize: 30, reserveAmmo: 150, reloadTime: 2200, spread: 0.025, auto: true, bulletSpeed: 100, range: 120, adsSpread: 0.008, adsFov: 45 },
+  { name: 'M870 霰弹枪', damage: 12, fireRate: 700, magSize: 8, reserveAmmo: 48, reloadTime: 2500, spread: 0.12, auto: false, bulletSpeed: 70, range: 50, pellets: 8, adsSpread: 0.08, adsFov: 65 },
+  { name: 'AWM 狙击枪', damage: 200, fireRate: 1400, magSize: 5, reserveAmmo: 25, reloadTime: 2800, spread: 0.001, auto: false, bulletSpeed: 180, range: 300, adsSpread: 0.0001, adsFov: 35 },
+  { name: 'RPG-7 火箭筒', damage: 150, fireRate: 2000, magSize: 1, reserveAmmo: 8, reloadTime: 3500, spread: 0, auto: false, bulletSpeed: 50, range: 150, explosive: true, adsSpread: 0, adsFov: 50, explosionRadius: 8 }
+];
+
+let currentWeapon = { ...WEAPONS[0] };
+let currentAmmo = currentWeapon.magSize;
+let reserveAmmo = currentWeapon.reserveAmmo;
+let lastFireTime = 0;
+let isReloading = false;
+let isFiring = false;
+let weaponModel = null;
+let weaponRecoil = 0;
+let muzzleFlash = null;
+
+// 作弊状态
+const cheats = { noCooldown: false, autoFire: false, noReload: false, noRecoil: false };
+
+let joystickTouchId = null;
+let joystickCenter = { x: 0, y: 0 };
+let joystickDelta = { x: 0, y: 0 };
+let lookTouchId = null;
+let lookLastPos = { x: 0, y: 0 };
+
+function isPortraitMode() { return window.innerWidth < window.innerHeight && window.innerWidth <= 900; }
+function getGameSize() {
+  if (isPortraitMode()) return { w: window.innerHeight, h: window.innerWidth };
+  return { w: window.innerWidth, h: window.innerHeight };
+}
+function transformTouch(clientX, clientY) {
+  if (!isPortraitMode()) return { x: clientX, y: clientY };
+  return { x: clientY, y: window.innerWidth - clientX };
+}
+function onWindowResize() {
+  if (!camera || !renderer) return;
+  const { w, h } = getGameSize();
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+}
+
+function createWeaponModel(type) {
+  if (weaponModel) { camera.remove(weaponModel); weaponModel.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
+  weaponModel = new THREE.Group();
+  const metalMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
+  const darkMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+  const woodMat = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+
+  switch(type) {
+    case 0: weaponModel.add(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.08, 0.2), metalMat));
+      const pg = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.12, 0.06), darkMat); pg.position.set(0, -0.08, 0.05); weaponModel.add(pg); break;
+    case 1: weaponModel.add(new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.1, 0.35), metalMat));
+      const sm = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.15, 0.08), darkMat); sm.position.set(0, -0.12, 0.05); weaponModel.add(sm); break;
+    case 2: weaponModel.add(new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.1, 0.6), woodMat));
+      const rb = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.25), metalMat); rb.rotation.x = Math.PI/2; rb.position.set(0, 0.02, -0.4); weaponModel.add(rb);
+      const rm = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.12, 0.1), darkMat); rm.position.set(0, -0.1, 0.1); weaponModel.add(rm); break;
+    case 3: weaponModel.add(new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 0.7), woodMat));
+      const sb = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.3), metalMat); sb.rotation.x = Math.PI/2; sb.position.set(0, 0.03, -0.5); weaponModel.add(sb); break;
+    case 4: weaponModel.add(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.08, 0.8), woodMat));
+      const sc = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.15), darkMat); sc.rotation.x = Math.PI/2; sc.position.set(0, 0.08, 0); weaponModel.add(sc);
+      const sn = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.4), metalMat); sn.rotation.x = Math.PI/2; sn.position.set(0, 0, -0.6); weaponModel.add(sn); break;
+    case 5: const lt = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.8), metalMat); lt.rotation.x = Math.PI/2; weaponModel.add(lt);
+      const ls = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.1, 0.05), darkMat); ls.position.set(0, 0.1, 0); weaponModel.add(ls); break;
+  }
+
+  const flashGeom = new THREE.SphereGeometry(0.06, 6, 6);
+  const flashMat = new THREE.MeshBasicMaterial({ color: 0xffcc00, transparent: true, opacity: 0 });
+  muzzleFlash = new THREE.Mesh(flashGeom, flashMat);
+  muzzleFlash.position.set(0, 0, -0.5);
+  weaponModel.add(muzzleFlash);
+
+  weaponModel.position.set(0.28, -0.26, -0.6);
+  camera.add(weaponModel);
+}
+
+function initThree() {
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(75, 1, 0.1, 800);
+  camera.position.copy(player.position);
+  camera.rotation.order = 'YXZ';
+  scene.add(camera);
+  renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  onWindowResize();
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+  const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+  dirLight.position.set(50, 100, 50);
+  dirLight.castShadow = true;
+  dirLight.shadow.mapSize.width = 1024;
+  dirLight.shadow.mapSize.height = 1024;
+  scene.add(dirLight);
+
+  createWeaponModel(0);
+  window.addEventListener('resize', onWindowResize);
+  window.addEventListener('orientationchange', () => setTimeout(onWindowResize, 200));
+}
+
+// ===== 地图生成器 =====
+function clearWorld() {
+  for (const b of buildings) { scene.remove(b); if (b.geometry) b.geometry.dispose(); }
+  buildings = [];
+  for (const e of enemies) scene.remove(e); enemies = [];
+  for (const b of bullets) scene.remove(b); bullets = [];
+  for (const ex of explosions) scene.remove(ex); explosions = [];
+  if (groundMesh) { scene.remove(groundMesh); groundMesh.geometry.dispose(); }
+  corridorPath = [];
+}
+
+function addBuilding(w, h, d, x, y, z, color, rotY = 0) {
+  const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color }));
+  b.position.set(x, y, z);
+  b.rotation.y = rotY;
+  b.castShadow = true; b.receiveShadow = true;
+  b.userData = { isBuilding: true, box: new THREE.Box3().setFromObject(b) };
+  scene.add(b); buildings.push(b);
+  return b;
+}
+
+function setupMap(mapKey) {
+  clearWorld();
+  let skyColor = 0x87CEEB, fogNear = 50, fogFar = 200, groundColor = 0x4a5d3a;
+  let bounds = 95;
+
+  if (mapKey === 'training') {
+    // 开阔训练场：随机建筑
+    skyColor = 0x87CEEB; groundColor = 0x4a5d3a; bounds = 95;
+    const colors = [0x8B7355, 0x696969, 0xA0522D, 0x708090, 0x808080];
+    for (let i = 0; i < 25; i++) {
+      const w = 5 + Math.random()*10, h = 8 + Math.random()*25, d = 5 + Math.random()*10;
+      let x, z;
+      do { x = (Math.random()-0.5)*150; z = (Math.random()-0.5)*150; } while (Math.abs(x)<15 && Math.abs(z)<15);
+      addBuilding(w, h, d, x, h/2, z, colors[Math.floor(Math.random()*colors.length)]);
+    }
+  }
+  else if (mapKey === 'straight') {
+    // 笔直无限走廊：一条射线，不转弯
+    skyColor = 0x1a1a2e; groundColor = 0x2a2a3a; fogNear = 15; fogFar = 90; bounds = 9999;
+    const wallColor = 0x444455;
+    corridorPath = [];
+    const halfW = 5, wallH = 7;
+    // 两段平行墙，沿 -Z 延伸（从 z=3 到 z=-2000）
+    addBuilding(2, wallH, 2003, -halfW, wallH/2, -998.5, wallColor);
+    addBuilding(2, wallH, 2003,  halfW, wallH/2, -998.5, wallColor);
+    // 路径点
+    for (let z = 0; z >= -2000; z -= 20) corridorPath.push({ x: 0, z });
+    // 起点挡板：紧贴墙顶
+    addBuilding(halfW*2 + 2, wallH, 2, 0, wallH/2, 3, 0x333344, 0);
+  }
+  else if (mapKey === 'urban') {
+    // 巷战：密集城市街区，交错错落
+    skyColor = 0x87CEEB; groundColor = 0x555555; fogNear = 40; fogFar = 160; bounds = 150;
+    const colors = [0x696969, 0x708090, 0x8B7355, 0xA0522D, 0x5a5a6a, 0x7a6a5a];
+    const block = 17;
+    for (let gx = -8; gx <= 8; gx++) {
+      for (let gz = -8; gz <= 8; gz++) {
+        if (Math.abs(gx) < 1 && Math.abs(gz) < 1) continue;
+        // 更高概率跳过，形成宽窄不一的街道
+        const skipRoll = Math.random();
+        if (skipRoll < 0.28) continue;
+        // 交错偏移：每格在格点上大幅抖动，楼体位置不再对齐
+        const staggerX = (Math.random()-0.5) * 8;
+        const staggerZ = (Math.random()-0.5) * 8;
+        const x = gx * block + staggerX;
+        const z = gz * block + staggerZ;
+        if (Math.hypot(x, z-10) < 13) continue;
+        // 楼体大小差异更大
+        const w = 7 + Math.random()*7;
+        const d = 7 + Math.random()*7;
+        const h = 5 + Math.random()*22;
+        // 部分楼体随机旋转一点，打破方正感
+        const rot = Math.random() < 0.35 ? (Math.random()-0.5)*0.5 : 0;
+        addBuilding(w, h, d, x, h/2, z, colors[Math.floor(Math.random()*colors.length)], rot);
+      }
+    }
+  }
+  else if (mapKey === 'flat') {
+    // 无限平坦：无建筑
+    skyColor = 0x87CEEB; groundColor = 0x8B7355; fogNear = 80; fogFar = 280; bounds = 9999;
+  }
+  else if (mapKey === 'maze') {
+    // 无限楼状障碍：密集随机盒子
+    skyColor = 0x1a1a2e; groundColor = 0x2a2a3a; fogNear = 25; fogFar = 90; bounds = 150;
+    const colors = [0x4a4a5a, 0x5a5a6a, 0x3a3a4a, 0x6a5a4a];
+    for (let i = 0; i < 60; i++) {
+      const w = 4 + Math.random()*6;
+      const h = 5 + Math.random()*15;
+      const d = 4 + Math.random()*6;
+      const x = (Math.random()-0.5)*280;
+      const z = (Math.random()-0.5)*280;
+      if (Math.hypot(x, z-10) < 12) continue;
+      addBuilding(w, h, d, x, h/2, z, colors[Math.floor(Math.random()*colors.length)]);
+    }
+  }
+
+  // 地面
+  const groundSize = (bounds > 1000) ? 2000 : bounds*2 + 50;
+  groundMesh = new THREE.Mesh(new THREE.PlaneGeometry(groundSize, groundSize), new THREE.MeshLambertMaterial({ color: groundColor }));
+  groundMesh.rotation.x = -Math.PI/2;
+  groundMesh.receiveShadow = true;
+  scene.add(groundMesh);
+
+  scene.background = new THREE.Color(skyColor);
+  scene.fog = new THREE.Fog(skyColor, fogNear, fogFar);
+  mapConfig = { bounds, spawnRadius: Math.min(60, bounds - 10) };
+}
+
+// 根据当前地图返回一个合法的敌人生成点（长廊地图沿走廊中心线生成）
+function getSpawnPosition() {
+  if (selectedMap === 'straight' && corridorPath.length > 1) {
+    // 找到离玩家最近的走廊路径点
+    let bestIdx = 0, bestD = Infinity;
+    for (let i = 0; i < corridorPath.length; i++) {
+      const p = corridorPath[i];
+      const d = (p.x - player.position.x)**2 + (p.z - player.position.z)**2;
+      if (d < bestD) { bestD = d; bestIdx = i; }
+    }
+    // 强制在走廊前方 4~7 段（约 88~154 单位）生成，绝对不在脸上
+    const off = 4 + Math.floor(Math.random() * 4);
+    const ti = Math.max(0, Math.min(corridorPath.length - 1, bestIdx + off));
+    const p = corridorPath[ti];
+    return { x: p.x + (Math.random()-0.5)*4, z: p.z + (Math.random()-0.5)*4 };
+  }
+  // 开阔地图：在玩家周围 40~75 单位之间生成
+  const minD = 40, maxD = 75;
+  const ang = Math.random() * Math.PI * 2;
+  const d = minD + Math.random() * (maxD - minD);
+  return {
+    x: player.position.x + Math.cos(ang) * d,
+    z: player.position.z + Math.sin(ang) * d
+  };
+}
+
+function spawnEnemy() {
+  const isZombie = selectedMode === 'zombie';
+  let mesh;
+  if (isZombie) {
+    // 丧尸：绿色身体 + 暗红色眼睛
+    mesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 1, 4, 8), new THREE.MeshLambertMaterial({ color: 0x3a8c3a }));
+    const hm = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), new THREE.MeshBasicMaterial({ color: 0xaa0000 }));
+    hm.position.y = 0.9; mesh.add(hm);
+  } else {
+    mesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 1, 4, 8), new THREE.MeshLambertMaterial({ color: 0xcc0000 }));
+    const hm = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff3333 }));
+    hm.position.y = 0.9; mesh.add(hm);
+  }
+
+  const sp = getSpawnPosition();
+  mesh.position.set(sp.x, 1, sp.z);
+  mesh.castShadow = true;
+
+  if (isZombie) {
+    // 丧尸：血稍多，速度随波次加快，无远程攻击
+    const speedBoost = Math.min(2.0, wave * 0.15);
+    mesh.userData = {
+      health: 60 + wave * 10,
+      speed: 2.2 + Math.random()*0.6 + speedBoost,
+      isZombie: true,
+      lastShotTime: 0,
+      shotCooldown: 999999,
+      spawnTime: Date.now()
+    };
+  } else {
+    mesh.userData = {
+      health: 80,
+      speed: 1.5+Math.random()*1,
+      isZombie: false,
+      lastShotTime: 0,
+      shotCooldown: 2500+Math.random()*1500,
+      spawnTime: Date.now()
+    };
+  }
+  scene.add(mesh); enemies.push(mesh);
+}
+
+function createExplosion(pos, radius, damage) {
+  const exp = new THREE.Mesh(new THREE.SphereGeometry(radius, 12, 12), new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0.8 }));
+  exp.position.copy(pos);
+  exp.userData = { life: 0.5, maxLife: 0.5, radius, damage };
+  scene.add(exp); explosions.push(exp);
+
+  for (let j = enemies.length-1; j >= 0; j--) {
+    const e = enemies[j];
+    const d = e.position.distanceTo(pos);
+    if (d < radius) {
+      e.userData.health -= damage * (1 - d/radius);
+      if (e.userData.health <= 0) {
+        scene.remove(e); enemies.splice(j, 1); kills++;
+        document.getElementById('killCount').textContent = kills;
+      }
+    }
+  }
+}
+
+function shoot() {
+  const now = Date.now();
+  const rateLimit = cheats.noCooldown ? 0 : currentWeapon.fireRate;
+  if (now - lastFireTime < rateLimit || isReloading || currentAmmo <= 0) return;
+  lastFireTime = now;
+
+  if (!cheats.noReload) {
+    currentAmmo--;
+    updateAmmoDisplay();
+  }
+
+  const pellets = currentWeapon.pellets || 1;
+  let spread = isAiming ? (currentWeapon.adsSpread || 0.005) : currentWeapon.spread;
+  const moveMag = Math.hypot(joystickDelta.x, joystickDelta.y);
+  if (moveMag > 10) spread *= 1.5;
+
+  for (let i = 0; i < pellets; i++) {
+    const dir = new THREE.Vector3((Math.random()-0.5)*spread, (Math.random()-0.5)*spread, -1).normalize().applyQuaternion(camera.quaternion).normalize();
+    const bg = currentWeapon.explosive ? new THREE.SphereGeometry(0.3, 8, 8) : new THREE.SphereGeometry(0.08, 4, 4);
+    const bm = new THREE.MeshBasicMaterial({ color: currentWeapon.explosive ? 0xff6600 : 0xffff00 });
+    const b = new THREE.Mesh(bg, bm);
+    b.position.copy(camera.position).addScaledVector(dir, 0.6);
+    b.userData = { velocity: dir.clone().multiplyScalar(currentWeapon.bulletSpeed), damage: currentWeapon.damage, life: currentWeapon.range/currentWeapon.bulletSpeed, explosive: currentWeapon.explosive, isEnemy: false, explosionRadius: currentWeapon.explosionRadius || 5 };
+    scene.add(b); bullets.push(b);
+  }
+
+  if (muzzleFlash) {
+    muzzleFlash.material.opacity = 1;
+    muzzleFlash.scale.setScalar(0.8 + Math.random()*0.4);
+  }
+
+  if (!cheats.noRecoil) {
+    player.rotationX = Math.min(Math.PI/2-0.1, player.rotationX + (isAiming ? 0.005 : 0.012));
+  }
+  weaponRecoil = cheats.noRecoil ? 0 : (isAiming ? 0.05 : 0.1);
+}
+
+function reload() {
+  if (cheats.noReload) return;
+  if (isReloading || currentAmmo === currentWeapon.magSize || reserveAmmo <= 0) return;
+  isReloading = true;
+  setTimeout(() => {
+    if (!isPlaying) { isReloading = false; return; }
+    const need = currentWeapon.magSize - currentAmmo;
+    const take = Math.min(need, reserveAmmo);
+    currentAmmo += take; reserveAmmo -= take; isReloading = false; updateAmmoDisplay();
+  }, currentWeapon.reloadTime);
+}
+
+function switchWeapon(index) {
+  if (index === currentWeaponIndex || index >= WEAPONS.length) return;
+  currentWeaponIndex = index;
+  currentWeapon = { ...WEAPONS[index] };
+  currentAmmo = currentWeapon.magSize; reserveAmmo = currentWeapon.reserveAmmo; isReloading = false;
+  createWeaponModel(index);
+  if (isAiming) { camera.fov = currentWeapon.adsFov || 45; camera.updateProjectionMatrix(); }
+  document.querySelectorAll('.weapon-slot').forEach((s, i) => s.classList.toggle('active', i === index));
+  updateAmmoDisplay();
+}
+
+function updateAmmoDisplay() {
+  document.getElementById('currentAmmo').textContent = currentAmmo;
+  document.getElementById('reserveAmmo').textContent = reserveAmmo;
+  document.getElementById('currentWeaponName').textContent = currentWeapon.name;
+}
+
+function checkCollision(pos, r = 0.6) {
+  for (const b of buildings) {
+    const box = b.userData.box;
+    if (pos.x+r > box.min.x && pos.x-r < box.max.x && pos.z+r > box.min.z && pos.z-r < box.max.z && pos.y < box.max.y) return true;
+  }
+  return false;
+}
+
+function raySphereIntersect(rayOrigin, rayEnd, sphereCenter, sphereRadius) {
+  const dir = new THREE.Vector3().subVectors(rayEnd, rayOrigin);
+  const len = dir.length();
+  if (len < 0.001) return -1;
+  dir.normalize();
+  const oc = new THREE.Vector3().subVectors(rayOrigin, sphereCenter);
+  const a = dir.dot(dir);
+  const b = 2 * oc.dot(dir);
+  const c = oc.dot(oc) - sphereRadius * sphereRadius;
+  const discriminant = b * b - 4 * a * c;
+  if (discriminant < 0) return -1;
+  const t = (-b - Math.sqrt(discriminant)) / (2 * a);
+  if (t >= 0 && t <= len) return t;
+  return -1;
+}
+
+function rayBoxIntersect(rayOrigin, rayEnd, box) {
+  const dir = new THREE.Vector3().subVectors(rayEnd, rayOrigin);
+  let tmin = 0, tmax = 1;
+  if (Math.abs(dir.x) < 0.0001) {
+    if (rayOrigin.x < box.min.x || rayOrigin.x > box.max.x) return false;
+  } else {
+    const invDir = 1 / dir.x;
+    let t1 = (box.min.x - rayOrigin.x) * invDir;
+    let t2 = (box.max.x - rayOrigin.x) * invDir;
+    if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+    tmin = Math.max(tmin, t1); tmax = Math.min(tmax, t2);
+    if (tmin > tmax) return false;
+  }
+  if (Math.abs(dir.y) < 0.0001) {
+    if (rayOrigin.y < box.min.y || rayOrigin.y > box.max.y) return false;
+  } else {
+    const invDir = 1 / dir.y;
+    let t1 = (box.min.y - rayOrigin.y) * invDir;
+    let t2 = (box.max.y - rayOrigin.y) * invDir;
+    if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+    tmin = Math.max(tmin, t1); tmax = Math.min(tmax, t2);
+    if (tmin > tmax) return false;
+  }
+  if (Math.abs(dir.z) < 0.0001) {
+    if (rayOrigin.z < box.min.z || rayOrigin.z > box.max.z) return false;
+  } else {
+    const invDir = 1 / dir.z;
+    let t1 = (box.min.z - rayOrigin.z) * invDir;
+    let t2 = (box.max.z - rayOrigin.z) * invDir;
+    if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+    tmin = Math.max(tmin, t1); tmax = Math.min(tmax, t2);
+    if (tmin > tmax) return false;
+  }
+  return true;
+}
+
+function damagePlayer(amount) {
+  player.health -= amount;
+  document.getElementById('healthFill').style.width = Math.max(0, player.health)+'%';
+  document.getElementById('damageOverlay').style.opacity = '1';
+  setTimeout(() => document.getElementById('damageOverlay').style.opacity = '0', 200);
+  if (player.health <= 0) gameOver();
+}
+
+function update(dt) {
+  if (!isPlaying) return;
+  const moveSpeed = player.speed * dt;
+  const sinY = Math.sin(player.rotationY), cosY = Math.cos(player.rotationY);
+  const fwd = -joystickDelta.y / 40, strafe = joystickDelta.x / 40;
+  const np = player.position.clone();
+  np.x += (-sinY*fwd + cosY*strafe) * moveSpeed;
+  np.z += (-cosY*fwd - sinY*strafe) * moveSpeed;
+  const B = mapConfig.bounds;
+  np.x = Math.max(-B, Math.min(B, np.x));
+  np.z = Math.max(-B, Math.min(B, np.z));
+  if (!checkCollision(np)) player.position.copy(np);
+
+  camera.position.copy(player.position);
+  camera.rotation.y = player.rotationY;
+  camera.rotation.x = player.rotationX;
+
+  weaponRecoil *= 0.85;
+  if (weaponModel) {
+    weaponModel.position.z = -0.6 + weaponRecoil;
+    weaponModel.position.y = -0.26 - weaponRecoil * 0.5;
+    if (isReloading) {
+      weaponModel.position.y = -0.26 + Math.sin(Date.now() * 0.01) * 0.08;
+      weaponModel.rotation.x = Math.sin(Date.now() * 0.008) * 0.15;
+    } else {
+      weaponModel.rotation.x *= 0.9;
+    }
+  }
+  if (muzzleFlash) muzzleFlash.material.opacity *= 0.8;
+
+  if (isFiring && (currentWeapon.auto || cheats.autoFire)) shoot();
+
+  // ===== 子弹更新 =====
+  for (let i = bullets.length-1; i >= 0; i--) {
+    const b = bullets[i];
+    if (!b.userData) { scene.remove(b); bullets.splice(i,1); continue; }
+    b.userData.prevPos = b.position.clone();
+    b.position.addScaledVector(b.userData.velocity, dt);
+    b.userData.life -= dt;
+    let hit = false;
+
+    if (!b.userData.isEnemy) {
+      for (let j = enemies.length-1; j >= 0; j--) {
+        const e = enemies[j];
+        const prevPos = b.userData.prevPos || b.position.clone();
+        const hitDist = raySphereIntersect(prevPos, b.position, e.position, 0.9);
+        if (hitDist > 0) {
+          if (b.userData.explosive) {
+            createExplosion(b.position, b.userData.explosionRadius, b.userData.damage);
+          } else {
+            const headShot = b.position.y > e.position.y + 0.6;
+            e.userData.health -= b.userData.damage * (headShot ? 3 : 1.5);
+            const hm = document.getElementById('hitMarker');
+            hm.style.opacity = '1'; setTimeout(() => hm.style.opacity = '0', 100);
+          }
+          hit = true;
+          if (e.userData.health <= 0) {
+            scene.remove(e); enemies.splice(j, 1); kills++;
+            document.getElementById('killCount').textContent = kills;
+          }
+          break;
+        }
+      }
+    }
+
+    if (!hit && b.position.y <= 0) {
+      if (b.userData.explosive) createExplosion(b.position, b.userData.explosionRadius, b.userData.damage);
+      hit = true;
+    }
+    if (!hit) {
+      const prevPos = b.userData.prevPos || b.position.clone();
+      for (const bld of buildings) {
+        if (rayBoxIntersect(prevPos, b.position, bld.userData.box)) {
+          if (b.userData.explosive) createExplosion(b.position, b.userData.explosionRadius, b.userData.damage);
+          hit = true; break;
+        }
+      }
+    }
+    if (hit || b.userData.life <= 0) { scene.remove(b); bullets.splice(i,1); }
+  }
+
+  // ===== 爆炸动画 =====
+  for (let i = explosions.length-1; i >= 0; i--) {
+    const exp = explosions[i];
+    exp.userData.life -= dt;
+    exp.scale.setScalar(1 + (0.5 - exp.userData.life) * 3);
+    exp.material.opacity = exp.userData.life / exp.userData.maxLife;
+    if (exp.userData.life <= 0) { scene.remove(exp); explosions.splice(i,1); }
+  }
+
+  // ===== 敌人 AI =====
+  for (const e of enemies) {
+    // 直道是直线，敌人直接朝玩家跑
+    let moveTarget = new THREE.Vector3(player.position.x, 0, player.position.z);
+
+    const tp = new THREE.Vector3().subVectors(moveTarget, e.position); tp.y = 0;
+    const dist = tp.length(); tp.normalize();
+    // 到玩家的真实距离（用于攻击/传送判断）
+    const realDist = Math.hypot(player.position.x - e.position.x, player.position.z - e.position.z);
+
+    if (realDist > 1.5) {
+      let enp = e.position.clone();
+      enp.x += tp.x * e.userData.speed * dt;
+      enp.z += tp.z * e.userData.speed * dt;
+      const B = mapConfig.bounds;
+      enp.x = Math.max(-B, Math.min(B, enp.x));
+      enp.z = Math.max(-B, Math.min(B, enp.z));
+
+      if (!checkCollision(enp)) {
+        e.position.copy(enp);
+      } else {
+        const tangent = new THREE.Vector3(-tp.z, 0, tp.x);
+        enp = e.position.clone();
+        enp.x += tangent.x * e.userData.speed * dt * 0.8;
+        enp.z += tangent.z * e.userData.speed * dt * 0.8;
+        if (!checkCollision(enp)) e.position.copy(enp);
+      }
+
+      // 超时/过远传送
+      if (!e.userData.spawnTime) e.userData.spawnTime = Date.now();
+      const timeOutLimit = selectedMap === 'straight' ? 60000 : 15000;
+      const timeOut = Date.now() - e.userData.spawnTime > timeOutLimit;
+      const tooFarThreshold = selectedMap === 'straight' ? 200 : 80;
+      const tooFar = realDist > tooFarThreshold;
+      if (timeOut || tooFar) {
+        const sp = getSpawnPosition();
+        e.position.x = sp.x;
+        e.position.z = sp.z;
+        e.userData.spawnTime = Date.now();
+        e.userData.pathIdx = undefined;
+      }
+    } else {
+      // 近身攻击
+      if (e.userData.isZombie) {
+        // 丧尸：持续近战伤害
+        damagePlayer(18 * dt);
+      }
+    }
+
+    e.lookAt(player.position.x, e.position.y, player.position.z);
+
+    // 只有战术模式敌人才射击
+    if (!e.userData.isZombie) {
+      const now = Date.now();
+      if (realDist < 35 && now - e.userData.lastShotTime > e.userData.shotCooldown) {
+        e.userData.lastShotTime = now;
+        const ed = new THREE.Vector3().subVectors(player.position, e.position).normalize();
+        ed.x += (Math.random()-0.5)*0.15; ed.y += (Math.random()-0.5)*0.08;
+        const eb = new THREE.Mesh(new THREE.SphereGeometry(0.1, 4, 4), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+        eb.position.copy(e.position); eb.position.y += 0.5;
+        eb.userData = { velocity: ed.multiplyScalar(35), damage: 8, life: 3, isEnemy: true };
+        scene.add(eb); bullets.push(eb);
+      }
+    }
+  }
+
+  // 敌方子弹打玩家
+  for (let i = bullets.length-1; i >= 0; i--) {
+    const b = bullets[i];
+    if (b.userData && b.userData.isEnemy && b.position.distanceTo(player.position) < 0.8) {
+      damagePlayer(b.userData.damage);
+      scene.remove(b); bullets.splice(i,1);
+      if (player.health <= 0) return;
+    }
+  }
+
+  // ===== 波次系统 =====
+  if (selectedMode === 'zombie') {
+    // 丧尸模式：持续刷怪，保持数量随波次增长，真正的人海
+    const maxAlive = Math.min(30 + wave * 6, 80);
+    if (enemies.length < maxAlive) {
+      if (!update._zombieTimer) update._zombieTimer = 0;
+      update._zombieTimer -= dt;
+      if (update._zombieTimer <= 0) {
+        // 每次刷 2~3 只，形成一波涌出的感觉
+        const burst = 2 + Math.floor(Math.random() * 2);
+        for (let k = 0; k < burst; k++) spawnEnemy();
+        update._zombieTimer = Math.max(0.25, 0.7 - wave * 0.03);
+      }
+    }
+    // 丧尸波次：存活 45 秒后进入下一波
+    if (!update._waveClock) update._waveClock = 0;
+    update._waveClock += dt;
+    if (update._waveClock > 45) {
+      update._waveClock = 0;
+      wave++;
+      document.getElementById('waveNum').textContent = wave;
+    }
+  } else {
+    // 战术对抗：清完一波出下一波
+    if (enemies.length === 0) {
+      wave++; document.getElementById('waveNum').textContent = wave;
+      waveStartTime = Date.now();
+      const cnt = Math.floor(2 + wave * 1.5);
+      for (let i = 0; i < cnt; i++) setTimeout(() => { if (isPlaying) spawnEnemy(); }, i * 1000);
+    } else if (Date.now() - waveStartTime > 45000) {
+      for (const e of enemies) scene.remove(e);
+      enemies = [];
+    }
+  }
+  updateMinimap();
+}
+
+function updateMinimap() {
+  const c = document.getElementById('minimap').getContext('2d');
+  c.clearRect(0, 0, 80, 80);
+  c.fillStyle = 'rgba(0,0,0,0.5)'; c.fillRect(0, 0, 80, 80);
+
+  const scale = 0.25;
+  const cx = 40, cy = 40;
+  const angle = player.rotationY;
+  const cosA = Math.cos(angle), sinA = Math.sin(angle);
+
+  function toMapPos(wx, wz) {
+    const dx = wx - player.position.x;
+    const dz = wz - player.position.z;
+    const rx = dx * cosA - dz * sinA;
+    const ry = dx * sinA + dz * cosA;
+    return { x: cx + rx * scale, y: cy + ry * scale };
+  }
+
+  c.fillStyle = '#555';
+  for (const b of buildings) {
+    const p = toMapPos(b.position.x, b.position.z);
+    if (p.x > 0 && p.x < 80 && p.y > 0 && p.y < 80) c.fillRect(p.x-2, p.y-2, 4, 4);
+  }
+
+  c.fillStyle = selectedMode === 'zombie' ? '#0f0' : '#f00';
+  for (const e of enemies) {
+    const p = toMapPos(e.position.x, e.position.z);
+    if (p.x > 0 && p.x < 80 && p.y > 0 && p.y < 80) {
+      c.beginPath(); c.arc(p.x, p.y, 2, 0, Math.PI*2); c.fill();
+    }
+  }
+
+  c.fillStyle = '#0ff';
+  c.beginPath(); c.arc(cx, cy, 3, 0, Math.PI*2); c.fill();
+  c.strokeStyle = '#0ff';
+  c.lineWidth = 2;
+  c.beginPath();
+  c.moveTo(cx - 4, cy - 6);
+  c.lineTo(cx, cy - 12);
+  c.lineTo(cx + 4, cy - 6);
+  c.stroke();
+}
+
+function gameOver() {
+  isPlaying = false; isFiring = false;
+  document.getElementById('finalKills').textContent = kills;
+  document.getElementById('finalWave').textContent = wave;
+  document.getElementById('deathScreen').style.display = 'flex';
+}
+
+function initTouchControls() {
+  const jz = document.getElementById('joystickZone'), j = document.getElementById('joystick'), jk = document.getElementById('joystickKnob');
+  const lz = document.getElementById('lookZone'), fb = document.getElementById('fireBtn'), rb = document.getElementById('reloadBtn'), ab = document.getElementById('adsBtn');
+
+  function applyJoy(dx, dy) {
+    const md = 40, d = Math.hypot(dx, dy);
+    if (d > md) { dx = dx/d*md; dy = dy/d*md; }
+    joystickDelta.x = dx; joystickDelta.y = dy;
+    jk.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+  }
+  function resetJoy() {
+    joystickTouchId = null; joystickDelta.x = 0; joystickDelta.y = 0;
+    jk.style.transform = 'translate(-50%, -50%)';
+  }
+
+  jz.addEventListener('touchstart', e => {
+    e.preventDefault(); if (joystickTouchId !== null) return;
+    const t = e.changedTouches[0]; joystickTouchId = t.identifier;
+    const rect = j.getBoundingClientRect();
+    const c = transformTouch(rect.left+rect.width/2, rect.top+rect.height/2);
+    joystickCenter = { x: c.x, y: c.y };
+    const tt = transformTouch(t.clientX, t.clientY);
+    applyJoy(tt.x-joystickCenter.x, tt.y-joystickCenter.y);
+  }, { passive: false });
+
+  document.addEventListener('touchmove', e => {
+    for (const t of e.changedTouches) {
+      const tt = transformTouch(t.clientX, t.clientY);
+      if (t.identifier === joystickTouchId) { e.preventDefault(); applyJoy(tt.x-joystickCenter.x, tt.y-joystickCenter.y); }
+      else if (t.identifier === lookTouchId) {
+        e.preventDefault();
+        const dx = tt.x-lookLastPos.x, dy = tt.y-lookLastPos.y;
+        player.rotationY -= dx*0.005;
+        player.rotationX = Math.max(-Math.PI/2+0.1, Math.min(Math.PI/2-0.1, player.rotationX - dy*0.005));
+        lookLastPos = { x: tt.x, y: tt.y };
+      }
+    }
+  }, { passive: false });
+
+  document.addEventListener('touchend', e => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === joystickTouchId) resetJoy();
+      if (t.identifier === lookTouchId) lookTouchId = null;
+    }
+  }, { passive: false });
+  document.addEventListener('touchcancel', e => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === joystickTouchId) resetJoy();
+      if (t.identifier === lookTouchId) lookTouchId = null;
+    }
+  }, { passive: false });
+
+  function beginLook(t) {
+    lookTouchId = t.identifier;
+    const tt = transformTouch(t.clientX, t.clientY);
+    lookLastPos = { x: tt.x, y: tt.y };
+  }
+
+  lz.addEventListener('touchstart', e => {
+    e.preventDefault(); if (lookTouchId !== null) return;
+    beginLook(e.changedTouches[0]);
+  }, { passive: false });
+
+  fb.addEventListener('touchstart', e => {
+    e.preventDefault(); isFiring = true;
+    if (!currentWeapon.auto) shoot();
+    if (lookTouchId === null) beginLook(e.changedTouches[0]);
+  }, { passive: false });
+  fb.addEventListener('touchend', e => {
+    e.preventDefault(); isFiring = false;
+    for (const t of e.changedTouches) if (t.identifier === lookTouchId) lookTouchId = null;
+  }, { passive: false });
+
+  ab.addEventListener('touchstart', e => {
+    e.preventDefault(); isAiming = !isAiming;
+    if (isAiming) { camera.fov = currentWeapon.adsFov || 45; ab.style.background = 'rgba(100,149,237,1)'; }
+    else { camera.fov = 75; ab.style.background = 'rgba(100,149,237,0.6)'; }
+    camera.updateProjectionMatrix();
+    document.getElementById('crosshair').classList.toggle('ads', isAiming);
+  }, { passive: false });
+
+  rb.addEventListener('touchstart', e => { e.preventDefault(); reload(); }, { passive: false });
+  document.querySelectorAll('.weapon-slot').forEach(s => s.addEventListener('touchstart', e => { e.preventDefault(); switchWeapon(parseInt(s.dataset.w)); }, { passive: false }));
+}
+
+function startGame() {
+  document.getElementById('startMenu').style.display = 'none';
+  document.getElementById('deathScreen').style.display = 'none';
+
+  // 根据选择的地图重建世界
+  setupMap(selectedMap);
+
+  // 玩家出生点
+  if (selectedMap === 'straight') {
+    player.position.set(0, 1.7, 0);
+  } else {
+    player.position.set(0, 1.7, 10);
+  }
+  player.rotationY = 0; player.rotationX = 0; player.health = 100;
+  kills = 0; wave = 1; waveStartTime = Date.now();
+  update._zombieTimer = 0; update._waveClock = 0;
+  isAiming = false; isFiring = false; isReloading = false;
+  camera.fov = 75; camera.updateProjectionMatrix();
+  document.getElementById('crosshair').classList.remove('ads');
+  document.getElementById('adsBtn').style.background = 'rgba(100,149,237,0.6)';
+  currentWeapon = { ...WEAPONS[currentWeaponIndex] };
+  currentAmmo = currentWeapon.magSize; reserveAmmo = currentWeapon.reserveAmmo;
+  createWeaponModel(currentWeaponIndex);
+  document.getElementById('healthFill').style.width = '100%';
+  document.getElementById('killCount').textContent = '0';
+  document.getElementById('waveNum').textContent = '1';
+  document.getElementById('modeTag').textContent = selectedMode === 'zombie' ? '丧尸模式' : '战术对抗';
+  updateAmmoDisplay();
+  document.querySelectorAll('.weapon-slot').forEach((s, i) => s.classList.toggle('active', i === currentWeaponIndex));
+
+  // 初始刷怪
+  if (selectedMode === 'zombie') {
+    const init = 12;
+    for (let i = 0; i < init; i++) setTimeout(() => { if (isPlaying) spawnEnemy(); }, i * 200);
+  } else {
+    for (let i = 0; i < 3; i++) setTimeout(() => { if (isPlaying) spawnEnemy(); }, i * 1500);
+  }
+  isPlaying = true;
+}
+
+let lastTime = Date.now();
+function gameLoop() {
+  const now = Date.now();
+  const dt = Math.min((now-lastTime)/1000, 0.1);
+  lastTime = now;
+  update(dt);
+  renderer.render(scene, camera);
+  requestAnimationFrame(gameLoop);
+}
+
+initThree();
+initTouchControls();
+
+// ===== 作弊菜单 =====
+const cheatBtn = document.getElementById('cheatBtn');
+const cheatPanel = document.getElementById('cheatPanel');
+cheatBtn.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); cheatPanel.classList.toggle('show'); }, { passive: false });
+cheatBtn.addEventListener('click', (e) => { e.stopPropagation(); cheatPanel.classList.toggle('show'); });
+['cheatNoCooldown','cheatAutoFire','cheatNoReload','cheatNoRecoil'].forEach(id => {
+  const el = document.getElementById(id);
+  const key = { cheatNoCooldown:'noCooldown', cheatAutoFire:'autoFire', cheatNoReload:'noReload', cheatNoRecoil:'noRecoil' }[id];
+  el.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); cheats[key] = !cheats[key]; e.target.classList.toggle('on', cheats[key]); }, { passive: false });
+  el.addEventListener('click', (e) => { e.stopPropagation(); cheats[key] = !cheats[key]; e.target.classList.toggle('on', cheats[key]); });
+});
+
+setTimeout(() => { if (window.innerWidth < window.innerHeight) document.getElementById('rotateHint').classList.add('show'); }, 1500);
+document.getElementById('closeHint').addEventListener('click', () => document.getElementById('rotateHint').classList.remove('show'));
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('restartBtn').addEventListener('click', startGame);
+
+// 武器选择
+document.querySelectorAll('.weapon-card').forEach(c => c.addEventListener('click', () => {
+  document.querySelectorAll('.weapon-card').forEach(x => x.classList.remove('active'));
+  c.classList.add('active');
+  currentWeaponIndex = { pistol:0, smg:1, rifle:2, shotgun:3, sniper:4, launcher:5 }[c.dataset.weapon];
+}));
+
+// 地图选择
+document.querySelectorAll('.map-card').forEach(c => c.addEventListener('click', () => {
+  document.querySelectorAll('.map-card').forEach(x => x.classList.remove('active'));
+  c.classList.add('active');
+  selectedMap = c.dataset.map;
+}));
+
+// 模式选择
+document.querySelectorAll('.mode-card').forEach(c => c.addEventListener('click', () => {
+  document.querySelectorAll('.mode-card').forEach(x => x.classList.remove('active'));
+  c.classList.add('active');
+  selectedMode = c.dataset.mode;
+}));
+
+gameLoop();
+</script>
+</div>
+</body>
+</html>
